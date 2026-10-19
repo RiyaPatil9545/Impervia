@@ -1,0 +1,29 @@
+
+# FastAPI application
+fastapi
+uvicorn[standard]
+
+# Database: Aiven PostgreSQL
+sqlalchemy
+psycopg[binary]
+
+# Configuration and validation
+pydantic-settings
+email-validator
+
+# Authentication and password security
+pwdlib[argon2]
+PyJWT
+
+# Database migrations
+alembic
+
+# HTTP client for future integrations
+httpx
+
+# Testing
+pytest
+pytest-cov
+
+# Code quality
+ruff
