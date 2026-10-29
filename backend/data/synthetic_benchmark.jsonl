@@ -1,0 +1,4 @@
+{"text": "Can you explain Dijkstra's algorithm? My email is student123@example.com.", "is_synthetic": true, "pii_spans": [{"category": "email", "start": 51, "end": 74}], "has_sensitive": false}
+{"text": "I am feeling really anxious about my calculus exam. What is integration by parts?", "is_synthetic": true, "pii_spans": [], "has_sensitive": true}
+{"text": "Calculate the derivative of f(x) = x^2 + 5x.", "is_synthetic": true, "pii_spans": [], "has_sensitive": false}
+{"text": "My phone is 555-019-2834 and my ID is PRN-998877.", "is_synthetic": true, "pii_spans": [{"category": "phone_number", "start": 12, "end": 24}, {"category": "student_id", "start": 38, "end": 48}], "has_sensitive": false}
