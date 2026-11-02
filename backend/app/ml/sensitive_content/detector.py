@@ -33,24 +33,29 @@ class RuleBasedSensitiveDetector(BaseSensitiveContentDetector):
     CATEGORIES = {
         "mental_health": {
             "high": [
-                r"\b(?:feel(?:ing)?\s+suicidal|kill\s+myself|end\s+my\s+life|want\s+to\s+die|self[\s-]harm)\b",
-                r"\b(?:severe\s+depression|can'?t\s+take\s+it\s+anymore|no\s+reason\s+to\s+live)\b",
+                # Acute crisis, suicidal ideation (including common misspellings like sucidal, sucide)
+                r"\b(?:feel(?:ing)?\s+(?:suicidal|sucidal|suicide|sucide)|suicid(?:al|e)|sucid(?:al|e)|suicidle)\b",
+                r"\b(?:(?:i\s+am|i'm)\s+(?:suicidal|sucidal))\b",
+                r"\b(?:(?:suicidal|sucidal)\s+thoughts)\b",
+                r"\b(?:kill\s+(?:my\s*self|myself)|end\s+my\s+life|want\s+to\s+die|self[\s-]harm)\b",
+                r"\b(?:severe\s+depression|can'?t\s+take\s+it\s+anymore|no\s+reason\s+to\s+live|better\s+off\s+dead)\b",
             ],
             "medium": [
                 # Acute non-crisis distress & panic attacks
                 r"\b(?:having\s+(?:a\s+)?(?:panic|anxiety)\s+attack|nervous\s+breakdown|crying\s+all\s+(?:day|night))\b",
                 # Ordinary stress, exam stress, and feeling stressed
-                r"\b(?:feel(?:ing)?\s+(?:very|so|really|extremely|quite|pretty|super)?\s*stressed(?:\s+out)?)\b",
+                r"\b(?:(?:i\s+am|i'm|feel(?:ing)?)\s+(?:very|so|really|extremely|quite|pretty|super|deeply)?\s*stressed(?:\s+out)?(?:\s+(?:about|over|by|with)\s+(?:my|the|this)?\s*(?:exam|exams|test|tests|midterm|midterms|final|finals|quiz|grade|grades|assignment|assignments|course|courses|school|college|studies|class|classes|gpa|academics|life|work|workload))?)\b",
                 r"\b(?:stressed\s+out)\b",
-                r"\b(?:stressed\s+(?:about|over|by|with)\s+(?:my|the|this)?\s*(?:exam|exams|test|tests|midterm|midterms|final|finals|quiz|grade|grades|assignment|course|school|college|studies|class|classes|gpa))\b",
-                r"\b(?:under\s+(?:a\s+lot\s+of|so\s+much|immense|too\s+much|constant|heavy)\s+stress)\b",
+                r"\b(?:stressed\s+(?:about|over|by|with)\s+(?:my|the|this)?\s*(?:exam|exams|test|tests|midterm|midterms|final|finals|quiz|grade|grades|assignment|assignments|course|courses|school|college|studies|class|classes|gpa|academics|life|work|workload))\b",
+                r"\b(?:(?:under|having|dealing\s+with|coping\s+with|struggling\s+with)\s+(?:a\s+lot\s+of|so\s+much|immense|too\s+much|constant|heavy)?\s*stress)\b",
                 r"\b(?:(?:exam|test|study|academic|school)\s+stress)\b",
                 # Overwhelm, coping difficulties, and academic burden
                 r"\b(?:feel(?:ing)?\s+(?:very|so|really|extremely|completely|pretty)?\s*overwhelmed(?:\s+(?:by|with|emotionally))?)\b",
+                r"\b(?:(?:i\s+am|i'm)\s+(?:very|so|really|extremely|completely)?\s*overwhelmed)\b",
                 r"\b(?:drowning\s+in\s+(?:work|assignments|study|studies|exams|schoolwork))\b",
                 r"\b(?:can'?t\s+cope\s+with\s+(?:the\s+)?(?:stress|pressure|workload|exams|classes|school|studies))\b",
                 # Anxiety, fear of failure, personal worries
-                r"\b(?:feel(?:ing)?\s+(?:very|so|really|extremely|quite|super)?\s*anxious(?:\s+(?:about|over|for))?)\b",
+                r"\b(?:(?:i\s+am|i'm|feel(?:ing)?)\s+(?:very|so|really|extremely|quite|super)?\s*anxious(?:\s+(?:about|over|for))?)\b",
                 r"\b(?:(?:having|dealing\s+with|struggling\s+with)\s+(?:a\s+lot\s+of|so\s+much|severe|bad)?\s*anxiety)\b",
                 r"\b(?:(?:test|exam|performance)\s+anxiety)\b",
                 r"\b(?:feel(?:ing)?\s+(?:hopeless|worthless|depressed|down|low))\b",
@@ -113,9 +118,9 @@ class RuleBasedSensitiveDetector(BaseSensitiveContentDetector):
 
         # Deduplicate overlapping spans
         spans.sort(key=lambda x: x.start)
-        return self._deduplicate_spans(spans)
+        return self._deduplicate_spans(spans, text)
 
-    def _deduplicate_spans(self, spans: list[SensitiveSpan]) -> list[SensitiveSpan]:
+    def _deduplicate_spans(self, spans: list[SensitiveSpan], text: str) -> list[SensitiveSpan]:
         if not spans:
             return []
         resolved: list[SensitiveSpan] = []
@@ -125,8 +130,21 @@ class RuleBasedSensitiveDetector(BaseSensitiveContentDetector):
                 continue
             prev = resolved[-1]
             if span.start < prev.end:
-                if span.severity == "high" and prev.severity != "high" or span.confidence > prev.confidence:
-                    resolved[-1] = span
+                # Merge overlapping disclosures to ensure complete phrase coverage
+                new_start = min(prev.start, span.start)
+                new_end = max(prev.end, span.end)
+                merged_text = text[new_start:new_end]
+                merged_sev = "high" if (prev.severity == "high" or span.severity == "high") else prev.severity
+                merged_conf = max(prev.confidence, span.confidence)
+                resolved[-1] = SensitiveSpan(
+                    category=prev.category if prev.severity == merged_sev else span.category,
+                    start=new_start,
+                    end=new_end,
+                    text=merged_text,
+                    confidence=merged_conf,
+                    severity=merged_sev,
+                    action=PrivacyAction.removed,
+                )
             else:
                 resolved.append(span)
         return resolved

@@ -34,6 +34,51 @@ def test_public_privacy_analyze(client: TestClient):
     assert "alice@univ.edu" not in data["sanitized_text"]
     assert len(data["findings"]) == 1
     assert data["findings"][0]["category"] == "email"
+    # Ensure persistence works even for unauthenticated requests
+    assert data["analysis_id"] is not None
+    assert data["created_at"] is not None
+
+
+def test_public_privacy_analyze_lowercase_name(client: TestClient):
+    response = client.post(
+        "/api/v1/privacy/analyze",
+        json={"text": "Can you explain DBMS normalization? My name is riya."},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pii_detected"] is True
+    assert data["processing_path"] == "sanitize"
+    assert "[REDACTED_NAME]" in data["sanitized_text"]
+    assert "riya" not in data["sanitized_text"].lower()
+    assert data["analysis_id"] is not None
+    assert data["created_at"] is not None
+    assert any(f["category"] == "person_name" for f in data["findings"])
+
+
+def test_public_privacy_analyze_pure_stress_null_academic(client: TestClient):
+    response = client.post(
+        "/api/v1/privacy/analyze",
+        json={"text": "I am feeling very stressed about my exams."},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["sensitive_content_detected"] is True
+    assert data["processing_path"] == "redirect"
+    assert data["extracted_academic_query"] is None
+    assert data["analysis_id"] is not None
+    assert data["created_at"] is not None
+
+
+def test_public_privacy_analyze_swagger_default_session_id_zero(client: TestClient):
+    response = client.post(
+        "/api/v1/privacy/analyze",
+        json={"text": "Explain Dijkstra's algorithm.", "session_id": 0},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["processing_path"] == "pass_through"
+    assert data["analysis_id"] is not None
+    assert data["created_at"] is not None
 
 
 def test_auth_registration_and_login_flow(client: TestClient):
@@ -95,6 +140,8 @@ def test_auth_registration_and_login_flow(client: TestClient):
     assert chat_data["user_message_id"] is not None
     assert chat_data["session_id"] is not None
     assert chat_data["processing_path"] == "pass_through"
+    assert chat_data["analysis_id"] is not None
+    assert chat_data["created_at"] is not None
 
     # 7. Check user analyses list
     analyses_resp = client.get("/api/v1/privacy/analyses", headers=headers)

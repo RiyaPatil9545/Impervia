@@ -1,3 +1,4 @@
+import re
 
 from app.ml.pii_detection.detector import PIISpan
 from app.ml.risk_assessment.assessor import RiskDecision
@@ -20,33 +21,59 @@ class SanitizerService:
         "ip_address": "[REDACTED_IP]",
     }
 
+    def _clean_punctuation(self, text: str) -> str:
+        """Collapse repeated punctuation marks and normalize whitespace."""
+        if not text:
+            return ""
+        cleaned = re.sub(r"([.!?,;:])\1+", r"\1", text)
+        cleaned = re.sub(r"[\s,;:-]+(?=[.!?])", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
+
     def mask_pii(self, text: str, spans: list[PIISpan]) -> str:
         """
         Replace identified PII spans with privacy tokens in reverse index order.
+        Handles both exact index offsets and substring matching for extracted queries.
         """
         if not text or not spans:
             return text
 
-        # Sort spans by start index descending to maintain valid offsets during slicing
-        sorted_spans = sorted(spans, key=lambda s: s.start, reverse=True)
+        # Check if spans accurately align with text indices
+        can_use_offsets = all(
+            span.start < len(text)
+            and span.end <= len(text)
+            and text[span.start : span.end] == span.text
+            for span in spans
+        )
+
+        if can_use_offsets:
+            sorted_spans = sorted(spans, key=lambda s: s.start, reverse=True)
+            sanitized = text
+            for span in sorted_spans:
+                token = self.REDACTION_MAP.get(span.category, "[REDACTED_PERSONAL_INFO]")
+                sanitized = sanitized[: span.start] + token + sanitized[span.end :]
+            return self._clean_punctuation(sanitized)
+
+        # Fallback to token replacement for spans that exist within a sliced substring
         sanitized = text
-        for span in sorted_spans:
+        for span in spans:
             token = self.REDACTION_MAP.get(span.category, "[REDACTED_PERSONAL_INFO]")
-            sanitized = sanitized[: span.start] + token + sanitized[span.end :]
-        return sanitized
+            if span.text in sanitized:
+                sanitized = sanitized.replace(span.text, token)
+        return self._clean_punctuation(sanitized)
 
     def separate(
         self,
         full_text: str,
         academic_query: str | None,
-        pii_spans: list[PIISpan],
+        pii_spans: list[PIISpan] | None = None,
     ) -> tuple[str, str]:
         """
         Separates academic query from sensitive context.
         Returns (sanitized_academic_query, privacy_notice).
         """
-        target_academic = academic_query or full_text
-        sanitized_academic = self.mask_pii(target_academic, pii_spans)
+        target_academic = self._clean_punctuation(academic_query or full_text)
+        sanitized_academic = self.mask_pii(target_academic, pii_spans or [])
 
         notice = (
             "Notice: Impervia detected personal or sensitive information in your message. "
@@ -74,10 +101,12 @@ class SanitizerService:
                 "It sounds like you are going through a very difficult time. Impervia is an "
                 "automated academic assistant and cannot provide medical or crisis support. "
                 "Please connect with caring professionals who can help:\n"
-                "- National Crisis Lifeline (US/Canada): Call or text 988\n"
+                "- India: Kiran Helpline (1800-599-0019) | Tele-MANAS (14416) | Vandrevala Foundation (9999 666 555)\n"
+                "- US/Canada: 988 Suicide & Crisis Lifeline (Call or text 988)\n"
+                "- UK: Samaritans (116 123) | NHS (111)\n"
+                "- International / Worldwide: https://findahelpline.com | https://www.befrienders.org\n"
                 "- Crisis Text Line: Text HOME to 741741\n"
-                "- International Resources: https://findahelpline.com\n"
-                "- Your university or campus counseling center\n"
+                "- Your campus or university counseling center\n"
                 "Your safety and wellbeing matter. Please reach out to one of these services right away."
             )
 

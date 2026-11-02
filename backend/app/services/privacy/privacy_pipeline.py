@@ -105,22 +105,32 @@ class PrivacyPipeline:
 
         if decision.processing_path == ProcessingPath.pass_through:
             sanitized_text = clean_text
-            extracted_academic_query = clean_text
+            # Return null/None when no valid academic query exists
+            extracted_academic_query = clean_text if relevance.has_academic_intent else None
 
         elif decision.processing_path == ProcessingPath.sanitize:
             sanitized_text = self.sanitizer.mask_pii(clean_text, pii_spans)
-            extracted_academic_query = sanitized_text
+            extracted_academic_query = sanitized_text if relevance.has_academic_intent else None
 
         elif decision.processing_path == ProcessingPath.separate:
-            # Mask any PII in the separated academic portion
-            academic_part = relevance.academic_text or clean_text
-            extracted_academic_query, notice = self.sanitizer.separate(
-                clean_text,
-                academic_part,
-                pii_spans,
-            )
-            sanitized_text = extracted_academic_query
-            redirection_message = notice
+            # Preserve valid academic portion and mask any PII inside it
+            academic_part = relevance.academic_text
+            if academic_part and relevance.has_academic_intent:
+                extracted_academic_query, notice = self.sanitizer.separate(
+                    clean_text,
+                    academic_part,
+                    pii_spans,
+                )
+                sanitized_text = extracted_academic_query
+                redirection_message = notice
+            else:
+                sanitized_text = "[CONTENT_REMOVED_BY_PRIVACY_HANDLER]"
+                extracted_academic_query = None
+                redirection_message = self.sanitizer.generate_redirection_response(
+                    decision,
+                    sensitive_spans,
+                    pii_spans,
+                )
 
         elif decision.processing_path == ProcessingPath.redirect:
             redirection_message = self.sanitizer.generate_redirection_response(

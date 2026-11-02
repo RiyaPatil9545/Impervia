@@ -27,7 +27,7 @@ class ChatService:
         allow_analytics = settings.allow_aggregate_analytics if settings else False
 
         # 2. Validate or create session if history is enabled
-        active_session_id = session_id
+        active_session_id = session_id if (session_id and session_id > 0) else None
         if save_history:
             if active_session_id:
                 session = chat_repository.get_session(db, active_session_id, user_id)
@@ -135,6 +135,9 @@ class ChatService:
                 sensitive_detected=result.sensitive_content_detected,
             )
 
+        db.commit()
+        db.refresh(analysis)
+
         return ChatProcessResponse(
             session_id=active_session_id if save_history else None,
             user_message_id=user_message_id,
@@ -147,6 +150,7 @@ class ChatService:
             assistant_response=assistant_text,
             findings=result.findings,
             analysis_id=analysis.id,
+            created_at=analysis.created_at,
         )
 
 

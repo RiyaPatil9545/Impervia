@@ -60,10 +60,25 @@ class RuleBasedPIIDetector(BasePIIDetector):
         re.IGNORECASE,
     )
 
-    # Self-identifying person name introductions
-    NAME_INTRO_REGEX = re.compile(
-        r"\b(?:my\s+name\s+is|i\s+am|i'm|this\s+is|call\s+me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b",
+    # Explicit self-identifying name introduction patterns (case-insensitive for human names)
+    EXPLICIT_NAME_INTRO_REGEX = re.compile(
+        r"\b(?:my\s+name\s+(?:is|'s)|this\s+is|call\s+me|myself)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+        re.IGNORECASE,
     )
+
+    # Ambiguous self-identifying patterns ("I am", "I'm") requiring capitalized proper noun
+    AMBIGUOUS_NAME_INTRO_REGEX = re.compile(
+        r"\b(?:i\s+am|i'm)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b",
+    )
+
+    # Non-name stop words to prevent false positives
+    NAME_STOP_WORDS = {
+        "a", "an", "the", "not", "here", "just", "back", "also", "ready",
+        "student", "asking", "wondering", "working", "stuck", "confused",
+        "trying", "looking", "interested", "writing", "studying", "tired",
+        "stressed", "fine", "okay", "sad", "depressed", "anxious",
+        "hopeless", "overwhelmed", "sick", "struggling", "learning",
+    }
 
     def detect(self, text: str) -> list[PIISpan]:
         spans: list[PIISpan] = []
@@ -165,10 +180,28 @@ class RuleBasedPIIDetector(BasePIIDetector):
                     )
 
         # 7. Name Introductions
-        for match in self.NAME_INTRO_REGEX.finditer(text):
-            name_part = match.group(1)
-            # Filter out common non-name words
-            if name_part.lower() not in {"a", "an", "the", "student", "asking", "wondering", "working", "stuck", "confused", "trying"}:
+        # 7a. Explicit introductions ("my name is riya", "call me alex", etc.)
+        for match in self.EXPLICIT_NAME_INTRO_REGEX.finditer(text):
+            name_part = match.group(1).strip()
+            tokens = [t.lower() for t in name_part.split()]
+            if not any(t in self.NAME_STOP_WORDS for t in tokens):
+                start_idx = match.start(1)
+                end_idx = match.end(1)
+                spans.append(
+                    PIISpan(
+                        category="person_name",
+                        start=start_idx,
+                        end=end_idx,
+                        text=name_part,
+                        confidence=Decimal("0.85"),
+                    )
+                )
+
+        # 7b. Ambiguous introductions ("I am Alice") requiring capitalization
+        for match in self.AMBIGUOUS_NAME_INTRO_REGEX.finditer(text):
+            name_part = match.group(1).strip()
+            tokens = [t.lower() for t in name_part.split()]
+            if not any(t in self.NAME_STOP_WORDS for t in tokens):
                 start_idx = match.start(1)
                 end_idx = match.end(1)
                 spans.append(

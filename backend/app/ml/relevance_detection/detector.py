@@ -43,6 +43,16 @@ class AcademicRelevanceDetector:
         self.intent_regexes = [re.compile(p, re.IGNORECASE) for p in self.ACADEMIC_INTENT_PATTERNS]
         self.domain_regexes = [re.compile(p, re.IGNORECASE) for p in self.ACADEMIC_DOMAINS]
 
+    def _clean_punctuation(self, text: str) -> str:
+        """Collapse multiple punctuation marks and clean up spacing."""
+        if not text:
+            return ""
+        cleaned = re.sub(r"([.!?,;:])\1+", r"\1", text)
+        cleaned = re.sub(r"[\s,;:-]+(?=[.!?])", "", cleaned)
+        cleaned = re.sub(r"[\s,;:-]+$", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
+
     def _score_sentence(self, sentence: str) -> float:
         score = 0.0
         for rx in self.intent_regexes:
@@ -68,9 +78,10 @@ class AcademicRelevanceDetector:
                 non_academic_text=None,
             )
 
-        sentences = preprocessor.segment_sentences(text)
+        cleaned_input = self._clean_punctuation(text)
+        sentences = preprocessor.segment_sentences(cleaned_input)
         if not sentences:
-            sentences = [text]
+            sentences = [cleaned_input]
 
         sens_texts = [st.lower() for st in (sensitive_texts or [])]
 
@@ -79,17 +90,36 @@ class AcademicRelevanceDetector:
         total_score = 0.0
 
         for sentence in sentences:
-            s_lower = sentence.lower()
-            # If the sentence contains sensitive content, treat it as non-academic / sensitive
+            s_clean = self._clean_punctuation(sentence)
+            s_lower = s_clean.lower()
             is_sensitive_sentence = any(st in s_lower for st in sens_texts) if sens_texts else False
 
-            s_score = self._score_sentence(sentence)
+            s_score = self._score_sentence(s_clean)
             total_score += s_score
 
             if s_score >= 0.4 and not is_sensitive_sentence:
-                academic_sentences.append(sentence)
+                if not s_clean.endswith((".", "?", "!")):
+                    s_clean += "."
+                academic_sentences.append(s_clean)
+            elif is_sensitive_sentence:
+                # Attempt to isolate valid academic portion from sensitive clause
+                isolated = s_clean
+                for st in sens_texts:
+                    isolated = re.sub(re.escape(st), "", isolated, flags=re.IGNORECASE)
+                isolated = re.sub(r"^[\s,;:.-]+|[\s,;:.-]+$", "", isolated)
+                isolated = re.sub(r"^(?:and|but|also|so|then|please)\s+", "", isolated, flags=re.IGNORECASE).strip()
+                isolated = self._clean_punctuation(isolated)
+
+                isolated_score = self._score_sentence(isolated) if isolated else 0.0
+                if isolated_score >= 0.4 and len(isolated.split()) >= 2:
+                    if not isolated.endswith((".", "?", "!")):
+                        isolated += "."
+                    academic_sentences.append(isolated)
+                    non_academic_sentences.append(s_clean)
+                else:
+                    non_academic_sentences.append(s_clean)
             else:
-                non_academic_sentences.append(sentence)
+                non_academic_sentences.append(s_clean)
 
         avg_score = total_score / len(sentences) if sentences else 0.0
         has_academic = len(academic_sentences) > 0

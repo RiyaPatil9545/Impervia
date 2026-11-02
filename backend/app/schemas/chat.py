@@ -44,8 +44,8 @@ class ChatSessionDetailResponse(BaseModel):
 
 
 class ChatProcessRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
-    session_id: int | None = Field(default=None, description="Optional existing session ID")
+    message: str = Field(..., min_length=1, max_length=10000, examples=["Explain binary search trees."])
+    session_id: int | None = Field(default=None, description="Optional existing session ID", examples=[None])
 
 
 class ChatProcessResponse(BaseModel):
@@ -60,3 +60,4 @@ class ChatProcessResponse(BaseModel):
     assistant_response: str
     findings: list[PrivacyFindingSchema] = Field(default_factory=list)
     analysis_id: int | None = None
+    created_at: datetime | None = None

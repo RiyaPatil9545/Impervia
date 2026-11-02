@@ -24,8 +24,18 @@ class PrivacyFindingSchema(BaseModel):
 
 
 class PrivacyAnalysisRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000, description="Raw input text to analyze")
-    session_id: int | None = Field(default=None, description="Optional chat session context")
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Raw input text to analyze",
+        examples=["Can you explain Dijkstra's algorithm? My email is alice@univ.edu."],
+    )
+    session_id: int | None = Field(
+        default=None,
+        description="Optional chat session context",
+        examples=[None],
+    )
 
 
 class PrivacyAnalysisResponse(BaseModel):

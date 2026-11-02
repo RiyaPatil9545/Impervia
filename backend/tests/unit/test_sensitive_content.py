@@ -84,3 +84,33 @@ def test_technical_engineering_stress_no_false_positives():
     for tech_text in technical_texts:
         spans = detector.detect(tech_text)
         assert len(spans) == 0, f"False positive detected on technical stress: '{tech_text}'"
+
+
+def test_suicidal_misspelling_and_crisis_coverage():
+    detector = RuleBasedSensitiveDetector()
+    crisis_texts = [
+        "I am feeling sucidal and don't know what to do.",
+        "I have been having sucidal thoughts lately.",
+        "i am sucidal.",
+        "I want to commit sucide.",
+    ]
+    for text in crisis_texts:
+        spans = detector.detect(text)
+        assert len(spans) >= 1, f"Failed to detect crisis in: '{text}'"
+        assert any(s.category == "mental_health" and s.severity == "high" for s in spans), (
+            f"Expected high-severity crisis for: '{text}'"
+        )
+
+
+def test_plain_stress_variations_medium_severity():
+    detector = RuleBasedSensitiveDetector()
+    stress_texts = [
+        "I am stressed.",
+        "I am very stressed.",
+        "I'm stressed out.",
+        "I am dealing with so much stress right now.",
+    ]
+    for text in stress_texts:
+        spans = detector.detect(text)
+        assert len(spans) >= 1, f"Failed to detect stress in: '{text}'"
+        assert all(s.severity == "medium" for s in spans), f"Expected medium severity for: '{text}'"

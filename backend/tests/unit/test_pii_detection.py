@@ -65,6 +65,34 @@ def test_name_introduction_detection():
     assert "John Doe" in name_spans[0].text
 
 
+def test_lowercase_name_introduction_detection():
+    detector = RuleBasedPIIDetector()
+    cases = [
+        ("Hello, my name is riya and I am studying biology.", "riya"),
+        ("call me riya please", "riya"),
+        ("this is riya with a question", "riya"),
+    ]
+    for text, expected_name in cases:
+        spans = detector.detect(text)
+        name_spans = [s for s in spans if s.category == "person_name"]
+        assert len(name_spans) >= 1, f"Failed to detect name in: {text}"
+        assert any(expected_name.lower() in s.text.lower() for s in name_spans)
+
+
+def test_name_detection_no_false_positive_on_emotional_state():
+    detector = RuleBasedPIIDetector()
+    non_name_texts = [
+        "I am stressed about my exams.",
+        "I'm feeling anxious today.",
+        "I am tired and overwhelmed.",
+        "I am asking about computer science.",
+    ]
+    for text in non_name_texts:
+        spans = detector.detect(text)
+        name_spans = [s for s in spans if s.category == "person_name"]
+        assert len(name_spans) == 0, f"False positive name detected in: '{text}'"
+
+
 def test_clean_input_no_false_positives():
     detector = RuleBasedPIIDetector()
     text = "What is the time complexity of QuickSort in Big-O notation?"

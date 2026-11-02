@@ -34,11 +34,16 @@ class TextPreprocessor:
     def segment_sentences(self, text: str) -> list[str]:
         """
         Split text into logical sentences/clauses for granular relevance/sensitive separation.
+        Splits on sentence terminals (. ! ? ; : \n) as well as comma-separated independent clauses.
         """
         if not text:
             return []
-        # Split on sentence/clause terminals (. ! ? ; : \n) keeping structure
-        sentences = re.split(r"(?<=[.!?;:\n])\s+", text)
+        # Split on sentence terminals or comma preceding clause starters
+        sentences = re.split(
+            r"(?<=[.!?;:\n])\s+|(?<=,)\s+(?=(?:i\s+am|i'm|feel(?:ing)?|my\s+name|call\s+me|can\s+you|could\s+you|please|explain|what|how|why)\b)",
+            text,
+            flags=re.IGNORECASE,
+        )
         return [s.strip() for s in sentences if s.strip()]
 
 

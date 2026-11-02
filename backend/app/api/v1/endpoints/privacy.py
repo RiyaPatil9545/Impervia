@@ -1,8 +1,13 @@
 
+import logging
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_optional_current_user
+from app.models.chat_session import ChatSession
 from app.models.user import User
 from app.repositories.analytics_repository import analytics_repository
 from app.repositories.audit_repository import audit_repository
@@ -14,6 +19,8 @@ from app.schemas.privacy import (
     PrivacyFindingSchema,
 )
 from app.services.privacy.privacy_pipeline import privacy_pipeline
+
+logger = logging.getLogger("impervia")
 
 router = APIRouter(prefix="/privacy", tags=["Privacy Pipeline"])
 
@@ -35,18 +42,26 @@ def analyze_text(
     """
     result = privacy_pipeline.process(request.text)
 
+    user_id = current_user.id if current_user else None
+
+    # Validate session_id exists in chat_sessions table before using as foreign key
+    valid_session_id = None
+    if request.session_id and request.session_id > 0:
+        stmt = select(ChatSession.id).where(ChatSession.id == request.session_id)
+        if current_user:
+            stmt = stmt.where(ChatSession.user_id == current_user.id)
+        if db.scalar(stmt):
+            valid_session_id = request.session_id
+
     analysis_id: int | None = None
-    created_at = None
+    created_at = datetime.now(UTC)
 
-    if current_user:
-        settings = user_repository.get_privacy_settings(db, current_user.id)
-        allow_analytics = settings.allow_aggregate_analytics if settings else False
-
-        # Persist privacy analysis record with message_id=None (in-memory standalone analysis)
+    # Persist privacy analysis record (supports both authenticated and anonymous requests)
+    try:
         analysis = privacy_repository.create_analysis(
             db,
-            user_id=current_user.id,
-            session_id=request.session_id,
+            user_id=user_id,
+            session_id=valid_session_id,
             message_id=None,
             pii_detected=result.pii_detected,
             sensitive_content_detected=result.sensitive_content_detected,
@@ -56,37 +71,45 @@ def analyze_text(
             detector_version=result.detector_version,
             processing_time_ms=result.processing_time_ms,
         )
-        analysis_id = analysis.id
-        created_at = analysis.created_at
 
         if result.findings:
             privacy_repository.add_findings(db, analysis.id, result.findings)
 
-        # Audit log (metadata only)
-        audit_repository.log_event(
-            db,
-            event_type="privacy_analysis_run",
-            user_id=current_user.id,
-            session_id=request.session_id,
-            analysis_id=analysis.id,
-            details={
-                "risk_level": result.risk_level.value,
-                "processing_path": result.processing_path.value,
-                "findings_count": len(result.findings),
-            },
-        )
+        if current_user:
+            settings = user_repository.get_privacy_settings(db, current_user.id)
+            allow_analytics = settings.allow_aggregate_analytics if settings else False
 
-        # Increment aggregate daily metrics ONLY if consent given
-        if allow_analytics:
-            analytics_repository.record_daily_analysis(
+            # Audit log (metadata only - no raw sensitive text)
+            audit_repository.log_event(
                 db,
-                risk_level=result.risk_level,
-                processing_path=result.processing_path,
-                pii_detected=result.pii_detected,
-                sensitive_detected=result.sensitive_content_detected,
+                event_type="privacy_analysis_run",
+                user_id=current_user.id,
+                session_id=valid_session_id,
+                analysis_id=analysis.id,
+                details={
+                    "risk_level": result.risk_level.value,
+                    "processing_path": result.processing_path.value,
+                    "findings_count": len(result.findings),
+                },
             )
 
+            # Increment aggregate daily metrics ONLY if consent given
+            if allow_analytics:
+                analytics_repository.record_daily_analysis(
+                    db,
+                    risk_level=result.risk_level,
+                    processing_path=result.processing_path,
+                    pii_detected=result.pii_detected,
+                    sensitive_detected=result.sensitive_content_detected,
+                )
+
         db.commit()
+        db.refresh(analysis)
+        analysis_id = analysis.id
+        created_at = analysis.created_at
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"Could not persist privacy analysis record: {exc.__class__.__name__}")
 
     return PrivacyAnalysisResponse(
         analysis_id=analysis_id,
