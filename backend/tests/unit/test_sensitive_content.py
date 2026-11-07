@@ -114,3 +114,22 @@ def test_plain_stress_variations_medium_severity():
         spans = detector.detect(text)
         assert len(spans) >= 1, f"Failed to detect stress in: '{text}'"
         assert all(s.severity == "medium" for s in spans), f"Expected medium severity for: '{text}'"
+
+
+def test_ending_my_life_and_active_self_harm_phrasings():
+    detector = RuleBasedSensitiveDetector()
+    crisis_cases = [
+        "I am thinking about ending my life and I might hurt myself right now.",
+        "I feel like ending it all.",
+        "I might hurt myself tonight.",
+        "I'm thinking of killing myself.",
+        "I am cutting myself and can't stop.",
+        "I want to take my own life.",
+    ]
+    for text in crisis_cases:
+        spans = detector.detect(text)
+        assert len(spans) >= 1, f"Failed to detect crisis in: '{text}'"
+        assert any(s.category == "mental_health" and s.severity == "high" for s in spans), (
+            f"Expected high-severity crisis for: '{text}'"
+        )
+

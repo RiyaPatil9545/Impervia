@@ -173,3 +173,26 @@ def test_end_to_end_pipeline_neutral_greeting_returns_null_academic_query():
     # Non-academic greeting must return null for extracted_academic_query
     assert res.extracted_academic_query is None
     assert res.sanitized_text == "Hello there, good morning!"
+
+
+def test_end_to_end_pipeline_ending_my_life_and_hurt_myself_crisis_redirect():
+    """
+    Regression test for: 'I am thinking about ending my life and I might hurt myself right now.'
+    Must detect crisis, must NOT detect PII (no false positive 'person_name' on 'right now'),
+    must assign high risk and redirect path with crisis resources.
+    """
+    pipeline = PrivacyPipeline()
+    raw = "I am thinking about ending my life and I might hurt myself right now."
+    res = pipeline.process(raw)
+
+    assert res.pii_detected is False
+    assert res.sensitive_content_detected is True
+    assert res.context_relevance == RelevanceStatus.not_relevant
+    assert res.risk_level == RiskLevel.high
+    assert res.processing_path == ProcessingPath.redirect
+    assert res.sanitized_text == "[CONTENT_REMOVED_BY_PRIVACY_HANDLER]"
+    assert res.extracted_academic_query is None
+    assert res.redirection_message is not None
+    assert "Tele-MANAS" in res.redirection_message or "1800-599-0019" in res.redirection_message
+    assert "988" in res.redirection_message
+    assert "findahelpline.com" in res.redirection_message

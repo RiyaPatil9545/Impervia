@@ -37,7 +37,7 @@ class RuleBasedSensitiveDetector(BaseSensitiveContentDetector):
                 r"\b(?:feel(?:ing)?\s+(?:suicidal|sucidal|suicide|sucide)|suicid(?:al|e)|sucid(?:al|e)|suicidle)\b",
                 r"\b(?:(?:i\s+am|i'm)\s+(?:suicidal|sucidal))\b",
                 r"\b(?:(?:suicidal|sucidal)\s+thoughts)\b",
-                r"\b(?:kill\s+(?:my\s*self|myself)|end\s+my\s+life|want\s+to\s+die|self[\s-]harm)\b",
+                r"\b(?:kill(?:ing)?\s+(?:my\s*self|myself)|end(?:ing)?\s+(?:my\s+life|it\s+all)|take\s+(?:my\s+own\s+life)|want\s+to\s+die|self[\s-]harm|hurt(?:ing)?\s+(?:my\s*self|myself)|harm(?:ing)?\s+(?:my\s*self|myself)|cut(?:ting)?\s+(?:my\s*self|myself))\b",
                 r"\b(?:severe\s+depression|can'?t\s+take\s+it\s+anymore|no\s+reason\s+to\s+live|better\s+off\s+dead)\b",
             ],
             "medium": [

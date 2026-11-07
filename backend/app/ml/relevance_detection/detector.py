@@ -1,8 +1,8 @@
 import re
 from dataclasses import dataclass
 
+from app.ml.preprocessing import preprocessor
 from app.models.enums import RelevanceStatus
-from app.services.privacy.preprocessing import preprocessor
 
 
 @dataclass

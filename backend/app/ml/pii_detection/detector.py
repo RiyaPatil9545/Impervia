@@ -62,7 +62,7 @@ class RuleBasedPIIDetector(BasePIIDetector):
 
     # Explicit self-identifying name introduction patterns (case-insensitive for human names)
     EXPLICIT_NAME_INTRO_REGEX = re.compile(
-        r"\b(?:my\s+name\s+(?:is|'s)|this\s+is|call\s+me|myself)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+        r"\b(?:my\s+name\s+(?:is|'s)|this\s+is|call\s+me)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
         re.IGNORECASE,
     )
 
@@ -78,6 +78,7 @@ class RuleBasedPIIDetector(BasePIIDetector):
         "trying", "looking", "interested", "writing", "studying", "tired",
         "stressed", "fine", "okay", "sad", "depressed", "anxious",
         "hopeless", "overwhelmed", "sick", "struggling", "learning",
+        "right", "now", "today", "tonight", "soon", "again", "alone", "please",
     }
 
     def detect(self, text: str) -> list[PIISpan]:
@@ -182,11 +183,16 @@ class RuleBasedPIIDetector(BasePIIDetector):
         # 7. Name Introductions
         # 7a. Explicit introductions ("my name is riya", "call me alex", etc.)
         for match in self.EXPLICIT_NAME_INTRO_REGEX.finditer(text):
-            name_part = match.group(1).strip()
-            tokens = [t.lower() for t in name_part.split()]
-            if not any(t in self.NAME_STOP_WORDS for t in tokens):
+            raw_tokens = match.group(1).split()
+            valid_tokens: list[str] = []
+            for t in raw_tokens:
+                if t.lower() in self.NAME_STOP_WORDS:
+                    break
+                valid_tokens.append(t)
+            if valid_tokens:
+                name_part = " ".join(valid_tokens)
                 start_idx = match.start(1)
-                end_idx = match.end(1)
+                end_idx = start_idx + len(name_part)
                 spans.append(
                     PIISpan(
                         category="person_name",
@@ -199,11 +205,16 @@ class RuleBasedPIIDetector(BasePIIDetector):
 
         # 7b. Ambiguous introductions ("I am Alice") requiring capitalization
         for match in self.AMBIGUOUS_NAME_INTRO_REGEX.finditer(text):
-            name_part = match.group(1).strip()
-            tokens = [t.lower() for t in name_part.split()]
-            if not any(t in self.NAME_STOP_WORDS for t in tokens):
+            raw_tokens = match.group(1).split()
+            valid_tokens = []
+            for t in raw_tokens:
+                if t.lower() in self.NAME_STOP_WORDS:
+                    break
+                valid_tokens.append(t)
+            if valid_tokens:
+                name_part = " ".join(valid_tokens)
                 start_idx = match.start(1)
-                end_idx = match.end(1)
+                end_idx = start_idx + len(name_part)
                 spans.append(
                     PIISpan(
                         category="person_name",

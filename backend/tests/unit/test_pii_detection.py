@@ -86,6 +86,10 @@ def test_name_detection_no_false_positive_on_emotional_state():
         "I'm feeling anxious today.",
         "I am tired and overwhelmed.",
         "I am asking about computer science.",
+        "I am thinking about ending my life and I might hurt myself right now.",
+        "I hurt myself right now.",
+        "I am sitting by myself today.",
+        "I want to kill myself soon.",
     ]
     for text in non_name_texts:
         spans = detector.detect(text)

@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from app.core.config import settings
 from app.ml.pii_detection.detector import PIISpan, pii_detector
@@ -45,13 +46,22 @@ class PrivacyPipeline:
     Academic Relevance -> Risk Assessment -> Privacy Decision -> Sanitized Output.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        hybrid_engine: Any = None,
+    ) -> None:
         self.preprocessor = preprocessor
         self.pii_detector = pii_detector
         self.sensitive_detector = sensitive_detector
         self.relevance_detector = academic_relevance_detector
         self.risk_assessor = risk_assessor
         self.sanitizer = sanitizer_service
+        if hybrid_engine is not None:
+            self.hybrid_analyzer = hybrid_engine
+        else:
+            from app.ml.slm.hybrid_analyzer import hybrid_analyzer
+
+            self.hybrid_analyzer = hybrid_analyzer
         self.version = settings.DETECTOR_VERSION
 
     def process(self, raw_input: str) -> PrivacyPipelineResult:
@@ -76,22 +86,36 @@ class PrivacyPipeline:
                 raw_decision_reason="Empty input text.",
             )
 
-        # Step 2: PII Detection
+        # Step 2: Deterministic Python PII Detection
         pii_spans: list[PIISpan] = self.pii_detector.detect(clean_text)
         pii_detected = len(pii_spans) > 0
 
-        # Step 3: Sensitive Content Detection
+        # Pre-sanitize text before SLM analysis: Replace all PII with redaction tokens
+        # so raw emails, phone numbers, student IDs, etc. NEVER reach Ollama
+        slm_input_text = self.sanitizer.mask_pii(clean_text, pii_spans) if pii_detected else clean_text
+
+        # Step 3: Baseline Deterministic Sensitive Content Detection
         sensitive_spans: list[SensitiveSpan] = self.sensitive_detector.detect(clean_text)
         sensitive_detected = len(sensitive_spans) > 0
 
-        # Step 4: Academic Relevance Detection & Query Extraction
+        # Step 4: Baseline Academic Relevance Detection & Query Extraction
         relevance: RelevanceAnalysisResult = self.relevance_detector.analyze(
             clean_text,
             has_sensitive=sensitive_detected,
             sensitive_texts=[s.text for s in sensitive_spans],
         )
 
-        # Step 5: Risk Assessment & Processing Path Decision
+        # Step 4b: Contextual Intelligence Enhancement (Local SLM Hybrid Layer)
+        sensitive_spans, relevance, slm_result = self.hybrid_analyzer.analyze_context(
+            clean_text=clean_text,
+            slm_input_text=slm_input_text,
+            rule_pii_spans=pii_spans,
+            rule_sensitive_spans=sensitive_spans,
+            rule_relevance=relevance,
+        )
+        sensitive_detected = len(sensitive_spans) > 0
+
+        # Step 5: Python Risk Assessment & Processing Path Policy Engine
         decision: RiskDecision = self.risk_assessor.assess(
             pii_spans=pii_spans,
             sensitive_spans=sensitive_spans,
@@ -152,6 +176,12 @@ class PrivacyPipeline:
 
         elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
 
+        active_version = (
+            f"impervia-hybrid-v2.0({slm_result.model_used})"
+            if (slm_result.is_available and slm_result.analysis is not None)
+            else self.version
+        )
+
         return PrivacyPipelineResult(
             pii_detected=pii_detected,
             sensitive_content_detected=sensitive_detected,
@@ -162,7 +192,7 @@ class PrivacyPipeline:
             extracted_academic_query=extracted_academic_query,
             redirection_message=redirection_message,
             findings=findings,
-            detector_version=self.version,
+            detector_version=active_version,
             processing_time_ms=elapsed_ms,
             raw_decision_reason=decision.reason,
         )

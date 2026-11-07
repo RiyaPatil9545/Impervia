@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     DEFAULT_RETENTION_DAYS: int = 30
     DETECTOR_VERSION: str = "impervia-pipeline-v1.0"
 
+    # Local SLM Intelligence Layer (Zero-Cloud Privacy Configuration)
+    SLM_ENABLED: bool = True
+    SLM_AUTO_START: bool = True
+    SLM_PROVIDER: str = "ollama"  # "ollama" or "custom_http"
+    SLM_ENDPOINT: str = "http://127.0.0.1:11434"
+    SLM_MODEL_NAME: str = "qwen2.5:1.5b"  # e.g. "qwen2.5:1.5b", "gemma2:2b", "llama3.2:1b", "phi3:mini"
+    SLM_TIMEOUT_SECONDS: float = 6.0
+    SLM_TEMPERATURE: float = 0.0
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",

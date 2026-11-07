@@ -27,6 +27,34 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error(f"PostgreSQL connection verification failed: {exc}")
 
+    # Safe Ollama SLM auto-start & warm-up
+    try:
+        from app.ml.slm.client import local_slm_client
+
+        if local_slm_client.enabled:
+            started = local_slm_client.ensure_service_running()
+            if started:
+                warmed = local_slm_client.warm_up()
+                if warmed:
+                    logger.info(
+                        f"Local SLM ({local_slm_client.model_name}) online and warmed up. "
+                        "Hybrid SLM architecture is active."
+                    )
+                else:
+                    logger.warning(
+                        f"Ollama is running, but model '{local_slm_client.model_name}' warm-up timed out. "
+                        "Model will load on first inference or fall back to Python rules."
+                    )
+            else:
+                logger.warning(
+                    "Ollama is offline and could not be started automatically. "
+                    "Hybrid SLM architecture is UNAVAILABLE. Safe Python rule-based fallback active."
+                )
+    except Exception as exc:
+        logger.warning(
+            f"Local SLM startup error ({exc.__class__.__name__}). Safe Python rule-based fallback active."
+        )
+
     yield
 
     logger.info(f"Shutting down {settings.APP_NAME} backend.")
