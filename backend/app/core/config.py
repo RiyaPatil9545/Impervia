@@ -18,16 +18,22 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
 
     # Aiven PostgreSQL Database
-    DB_HOST: str
+    DB_HOST: str = "localhost"
     DB_PORT: int = 5432
-    DB_NAME: str
-    DB_USER: str
-    DB_PASSWORD: str
+    DB_NAME: str = "defaultdb"
+    DB_USER: str = "avnadmin"
+    DB_PASSWORD: str = "password"
     DB_SSLMODE: str = "require"
 
     # Privacy Pipeline Defaults
     DEFAULT_RETENTION_DAYS: int = 30
     DETECTOR_VERSION: str = "impervia-pipeline-v1.0"
+
+    # Google Gemini Academic LLM Configuration (Phase 2)
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MAX_OUTPUT_TOKENS: int = 800
+    GEMINI_TEMPERATURE: float = 0.3
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
