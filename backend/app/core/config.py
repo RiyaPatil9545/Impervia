@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     SLM_TIMEOUT_SECONDS: float = 6.0
     SLM_TEMPERATURE: float = 0.0
 
+    # Gemini AI Configuration
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_MAX_TOKENS: int = 1500
+    GEMINI_TEMPERATURE: float = 0.3
+    GEMINI_TIMEOUT_SECONDS: float = 30.0
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",

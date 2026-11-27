@@ -41,17 +41,28 @@ class ChatService:
         result = privacy_pipeline.process(raw_message)
 
         # 4. Formulate assistant response based on decision path
+        # Gemini is ONLY invoked if an extracted academic query exists and the request is not redirected
+        academic_query = result.extracted_academic_query
+
         if result.processing_path == ProcessingPath.redirect:
             assistant_text = result.redirection_message or "Your request cannot be processed due to privacy restrictions."
         elif result.processing_path == ProcessingPath.separate:
             # Generate academic response for separated query and attach privacy notice
-            academic_part = result.extracted_academic_query or result.sanitized_text
-            gen_resp = academic_generation_service.generate_response(academic_part)
-            assistant_text = f"{result.redirection_message}\n\n{gen_resp}"
+            if academic_query and academic_query.strip():
+                gen_resp = academic_generation_service.generate_response(academic_query)
+                assistant_text = f"{result.redirection_message}\n\n{gen_resp}"
+            else:
+                assistant_text = result.redirection_message or "Your message contained sensitive disclosures without an academic question."
         else:
             # pass_through or sanitize
-            academic_part = result.extracted_academic_query or result.sanitized_text
-            assistant_text = academic_generation_service.generate_response(academic_part)
+            if academic_query and academic_query.strip():
+                assistant_text = academic_generation_service.generate_response(academic_query)
+            else:
+                # No valid academic query found (e.g., neutral greetings or non-academic statements)
+                assistant_text = (
+                    "Impervia is ready to assist with your academic coursework and questions. "
+                    "Please submit an academic question related to your studies."
+                )
 
         user_message_id: int | None = None
         assistant_message_id: int | None = None
@@ -80,7 +91,10 @@ class ChatService:
             assistant_message_id = asst_msg.id
 
             # Log academic generation link if relevant
-            if result.processing_path in {ProcessingPath.pass_through, ProcessingPath.sanitize, ProcessingPath.separate}:
+            if (
+                result.processing_path in {ProcessingPath.pass_through, ProcessingPath.sanitize, ProcessingPath.separate}
+                and academic_query
+            ):
                 academic_repository.create_academic_response_record(
                     db,
                     user_id=user_id,

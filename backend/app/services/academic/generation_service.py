@@ -1,30 +1,39 @@
 
 
+from app.core.config import settings
+from app.services.academic.gemini_service import (
+    GeminiAcademicService,
+    gemini_academic_service,
+)
+
+
 class AcademicGenerationService:
     """
-    Interface for future Academic LLM integration.
-    Phase 1 delivers the Privacy Handler foundation.
-    Future phases will attach local SLMs or external academic reasoning models.
+    Coordinates academic explanation generation for student queries.
+    Delegates sanitized queries to Google Gemini Academic LLM.
+    Ensures ONLY queries pre-sanitized by the Privacy Handler reach the model.
     """
 
-    MODEL_NAME = "impervia-academic-llm-placeholder-v1"
+    def __init__(self, llm_service: GeminiAcademicService | None = None) -> None:
+        self.llm_service = llm_service or gemini_academic_service
+
+    @property
+    def MODEL_NAME(self) -> str:
+        return self.llm_service.model_name or settings.GEMINI_MODEL
 
     def generate_response(
         self,
-        sanitized_academic_query: str,
+        sanitized_academic_query: str | None,
         system_context: str | None = None,
     ) -> str:
         """
-        Placeholder generator for Phase 1.
-        Confirms that the query was approved by the Privacy Handler and is ready
-        for academic inference in Phase 2.
+        Generates an educational response for the sanitized academic query.
+        Never calls Gemini if no query was provided.
         """
-        return (
-            f"[Academic Response - Phase 1 Backend Verification]\n"
-            f"Your academic inquiry has been approved by Impervia Privacy Handler:\n"
-            f"Query: \"{sanitized_academic_query}\"\n\n"
-            f"Privacy Assessment: Safe for Academic LLM processing without personal disclosure."
-        )
+        if not sanitized_academic_query or not sanitized_academic_query.strip():
+            return "No academic question was provided for processing."
+
+        return self.llm_service.generate_academic_response(sanitized_academic_query.strip())
 
 
 academic_generation_service = AcademicGenerationService()
